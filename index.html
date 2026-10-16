@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#17324d">
+    <meta name="description" content="Detect roadway assets in images with the TxDOT San Antonio District computer vision model.">
+    <title>TxDOT San Antonio District | Asset Detection</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="./" aria-label="TxDOT San Antonio District Asset Detection home">
+          <img class="brand-logo" src="./assets/txdot-logo.svg" alt="Texas Department of Transportation logo">
+          <span class="brand-copy">
+            <span class="brand-district">San Antonio District</span>
+          </span>
+        </a>
+        <span class="header-label">Asset Detection</span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="intro">
+        <p class="eyebrow">COMPUTER VISION TOOL</p>
+        <h1>Find roadway assets in your images.</h1>
+        <p class="intro-copy">Select one image or a folder of images. The TxDOT San Antonio District model will identify assets, mark them on your images, and prepare a spreadsheet of results.</p>
+        <p class="privacy-note"><span class="privacy-icon" aria-hidden="true">●</span> Images are processed in your browser and are not uploaded to a server.</p>
+      </section>
+
+      <section class="workspace" aria-label="Asset detection workspace">
+        <section class="panel upload-panel" aria-labelledby="upload-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="step-label">STEP 1</p>
+              <h2 id="upload-heading">Choose your images</h2>
+            </div>
+          </div>
+
+          <div class="upload-mode" role="group" aria-label="Choose upload type">
+            <button class="mode-button active" id="single-mode" type="button" aria-pressed="true">Single image</button>
+            <button class="mode-button" id="folder-mode" type="button" aria-pressed="false">Folder of images</button>
+          </div>
+
+          <label class="drop-zone" id="drop-zone" for="image-input">
+            <span class="upload-icon" aria-hidden="true">↑</span>
+            <span class="drop-title" id="drop-title">Choose an image to get started</span>
+            <span class="drop-hint" id="drop-hint">JPG, PNG, WebP, or BMP</span>
+            <span class="browse-button">Browse files</span>
+          </label>
+          <input id="image-input" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/bmp">
+          <div class="folder-file-picker" id="folder-file-picker" hidden>
+            <span>Can’t see images in the folder picker?</span>
+            <button class="secondary-button" id="browse-images-button" type="button">Browse image files</button>
+          </div>
+          <input id="image-files-input" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" multiple>
+
+          <div class="selection-heading">
+            <h3>Selected images</h3>
+            <div class="selection-actions">
+              <span class="count-pill" id="selection-count">0 images</span>
+              <button class="secondary-button reset-button" id="reset-button" type="button" aria-label="Reset selected images and results">Reset</button>
+            </div>
+          </div>
+          <div class="image-grid selected-grid" id="selected-grid">
+            <p class="empty-state">Your image previews will appear here.</p>
+          </div>
+          <p class="table-note" id="selected-preview-note" hidden></p>
+
+          <button class="primary-button" id="run-button" type="button" disabled>
+            <span>Run detection</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <p class="supported-note">For best performance, use a recent version of Chrome or Edge. Large folders may take longer to process.</p>
+        </section>
+
+        <section class="panel results-panel" aria-labelledby="results-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="step-label">STEP 2</p>
+              <h2 id="results-heading">Your results</h2>
+            </div>
+            <span class="status-badge" id="status-badge">Waiting for images</span>
+          </div>
+
+          <div class="progress-area" id="progress-area" hidden aria-live="polite">
+            <div class="progress-copy">
+              <span id="progress-label">Preparing detection…</span>
+              <span id="progress-value">0%</span>
+            </div>
+            <div class="progress-track" role="progressbar" aria-label="Detection progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-track">
+              <span id="progress-bar"></span>
+            </div>
+          </div>
+          <p class="error-message" id="error-message" role="alert" hidden></p>
+          <p class="success-message" id="success-message" role="status" hidden></p>
+
+          <div class="results-content" id="results-content">
+            <section class="result-section">
+              <div class="section-title-row">
+                <h3>Annotated images</h3>
+                <button class="secondary-button" id="download-images" type="button" disabled>Download images (.zip)</button>
+              </div>
+              <div class="image-grid results-grid" id="results-grid">
+                <p class="empty-state">Annotated previews will appear here after detection.</p>
+              </div>
+              <p class="table-note" id="results-preview-note" hidden></p>
+            </section>
+
+            <section class="result-section spreadsheet-section">
+              <div class="section-title-row">
+                <div>
+                  <h3>Detection spreadsheet</h3>
+                  <p class="section-description">One row per detected asset. Images without detections are listed as “No Detection.”</p>
+                </div>
+                <button class="secondary-button" id="download-spreadsheet" type="button" disabled>Download .xlsx</button>
+              </div>
+              <div class="table-wrap" id="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Image Filename</th>
+                      <th scope="col">Confidence</th>
+                      <th scope="col">Asset Type</th>
+                    </tr>
+                  </thead>
+                  <tbody id="spreadsheet-preview">
+                    <tr><td class="empty-table" colspan="3">The spreadsheet preview will appear here after detection.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="table-note" id="table-note" hidden></p>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <footer class="site-footer">
+        <p>TxDOT San Antonio District Asset Detection</p>
+        <p class="footer-disclaimer">Automated detections are estimates and should be reviewed before use.</p>
+      </footer>
+    </main>
+  </body>
+</html>
