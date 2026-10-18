@@ -30,6 +30,27 @@ Large folders are prepared and annotated one image at a time, while the current 
 
 The checkpoint is intentionally not published. The checked-in files in `assets/model/` are the browser-ready ONNX model split into pieces smaller than GitHub's per-file size limit.
 
+## Python inference component
+
+`inference.py` provides an in-memory inference class for a Python service or SageMaker deployment. It loads the `.pt` model once, selects CUDA when available (otherwise CPU), processes encoded image bytes in batches of four by default, and returns each filename, original dimensions, and detections with asset type, decimal confidence, and `x1`, `y1`, `x2`, `y2` pixel coordinates. It does not write input images to disk. The defaults preserve the website's current 640-pixel input, 0.25 confidence threshold, and 0.7 IoU threshold.
+
+Example use from a SageMaker notebook:
+
+```python
+from pathlib import Path
+
+from inference import AssetDetector
+
+detector = AssetDetector("/path/to/SAT Asset Detection Model.pt", batch_size=4)
+images = [
+    (path.name, path.read_bytes())
+    for path in sorted(Path("/path/to/images").glob("*.jpg"))
+]
+results = detector.predict_images(images)
+```
+
+This is the reusable inference component only; it does not expose a network API or deploy a SageMaker endpoint. Add an authenticated service layer before connecting a browser to it. Never put AWS credentials in frontend code, and confirm TxDOT's image-handling requirements before sending real images to AWS.
+
 To rebuild those files after replacing `SAT Asset Detection Model.pt`, use Python 3.10 or newer in a virtual environment:
 
 ```powershell
