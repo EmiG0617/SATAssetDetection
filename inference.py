@@ -21,9 +21,10 @@ class Detection(TypedDict):
 
 class ImageDetections(TypedDict):
     filename: str
-    width: int
-    height: int
+    width: int | None
+    height: int | None
     detections: list[Detection]
+    error: str | None
 
 
 class AssetDetector:
@@ -66,17 +67,30 @@ class AssetDetector:
         output: list[ImageDetections] = []
         for start in range(0, len(images), self.batch_size):
             batch = images[start : start + self.batch_size]
-            decoded_images = [
-                (filename, self._decode_image(filename, image_bytes))
-                for filename, image_bytes in batch
-            ]
+            batch_results: list[tuple[int, ImageDetections]] = []
+            decoded_images: list[tuple[int, str, np.ndarray]] = []
+            for index, (filename, image_bytes) in enumerate(batch):
+                try:
+                    image = self._decode_image(filename, image_bytes)
+                except ValueError as error:
+                    batch_results.append(
+                        (index, self._error_result(filename, str(error)))
+                    )
+                else:
+                    decoded_images.append((index, filename, image))
+
+            if not decoded_images:
+                batch_results.sort(key=lambda result: result[0])
+                output.extend(result for _, result in batch_results)
+                continue
+
             predictions = self.model.predict(
-                source=[image for _, image in decoded_images],
+                source=[image for _, _, image in decoded_images],
                 imgsz=self.image_size,
                 conf=self.confidence,
                 iou=self.iou,
                 device=self.device,
-                batch=self.batch_size,
+                batch=len(decoded_images),
                 save=False,
                 verbose=False,
             )
@@ -86,10 +100,14 @@ class AssetDetector:
                     "than the number of input images."
                 )
 
-            for (filename, image), prediction in zip(
+            for (index, filename, image), prediction in zip(
                 decoded_images, predictions, strict=True
             ):
-                output.append(self._format_result(filename, image, prediction))
+                batch_results.append(
+                    (index, self._format_result(filename, image, prediction))
+                )
+            batch_results.sort(key=lambda result: result[0])
+            output.extend(result for _, result in batch_results)
         return output
 
     @staticmethod
@@ -133,4 +151,15 @@ class AssetDetector:
             "width": width,
             "height": height,
             "detections": detections,
+            "error": None,
+        }
+
+    @staticmethod
+    def _error_result(filename: str, message: str) -> ImageDetections:
+        return {
+            "filename": filename,
+            "width": None,
+            "height": None,
+            "detections": [],
+            "error": message,
         }

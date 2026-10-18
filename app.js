@@ -6,6 +6,7 @@
   const IOU_THRESHOLD = 0.7;
   const MAX_DETECTIONS = 300;
   const PREVIEW_LIMIT = 50;
+  const ANNOTATION_CONCURRENCY = 2;
   const SUPPORTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/bmp"]);
   const SPREADSHEET_HEADERS = ["Image Filename", "Confidence", "Asset Type", "x1", "y1", "x2", "y2"];
 
@@ -603,7 +604,7 @@
       return { results: [], failures, maxConfidence, timings: { preparationMs, inferenceMs, decodeMs, annotationMs } };
     }
 
-    const results = [];
+    const decodedImages = [];
     try {
       for (const [batchIndex, item] of preparedImages.entries()) {
         try {
@@ -621,37 +622,71 @@
           const detections = decoded.detections;
           decodeMs += performance.now() - decodeStart;
           const filename = imageFilename(item.file);
-          const annotationStart = performance.now();
-          const annotatedBlob = await annotateImage(item.prepared.bitmap, detections);
-          annotationMs += performance.now() - annotationStart;
           const rows = detections.length
             ? detections.map((detection) => ({
                 "Image Filename": filename,
                 Confidence: Math.round(detection.confidence * 1000) / 1000,
                 "Asset Type": modelMetadata.classNames[detection.classIndex],
-              x1: Math.round(detection.x1 * 100) / 100,
-              y1: Math.round(detection.y1 * 100) / 100,
-              x2: Math.round(detection.x2 * 100) / 100,
-              y2: Math.round(detection.y2 * 100) / 100,
-            }))
+                x1: Math.round(detection.x1 * 100) / 100,
+                y1: Math.round(detection.y1 * 100) / 100,
+                x2: Math.round(detection.x2 * 100) / 100,
+                y2: Math.round(detection.y2 * 100) / 100,
+              }))
             : [{ "Image Filename": filename, Confidence: 0, "Asset Type": "No Detection", x1: "", y1: "", x2: "", y2: "" }];
-          results.push({
+          decodedImages.push({
             file: item.file,
-            imageResult: { blob: annotatedBlob, filename, archivePath: resultPath(filename) },
+            prepared: item.prepared,
+            filename,
             rows,
             detectionCount: detections.length,
+            detections,
           });
         } catch (error) {
+          item.prepared.bitmap.close();
           failures.push({
             file: item.file,
             message: error.message || "Could not process this image.",
           });
-        } finally {
-          item.prepared.bitmap.close();
         }
       }
     } finally {
       outputTensor.dispose();
+    }
+
+    const results = [];
+    for (let index = 0; index < decodedImages.length; index += ANNOTATION_CONCURRENCY) {
+      const annotationBatch = decodedImages.slice(index, index + ANNOTATION_CONCURRENCY);
+      const annotationStart = performance.now();
+      const annotated = await Promise.all(annotationBatch.map(async (item) => {
+        try {
+          const blob = await annotateImage(item.prepared.bitmap, item.detections);
+          return { item, blob };
+        } catch (error) {
+          return { item, error };
+        } finally {
+          item.prepared.bitmap.close();
+        }
+      }));
+      annotationMs += performance.now() - annotationStart;
+      for (const outcome of annotated) {
+        if (outcome.error) {
+          failures.push({
+            file: outcome.item.file,
+            message: outcome.error.message || "Could not process this image.",
+          });
+        } else {
+          results.push({
+            file: outcome.item.file,
+            imageResult: {
+              blob: outcome.blob,
+              filename: outcome.item.filename,
+              archivePath: resultPath(outcome.item.filename),
+            },
+            rows: outcome.item.rows,
+            detectionCount: outcome.item.detectionCount,
+          });
+        }
+      }
     }
 
     return {
