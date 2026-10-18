@@ -56,6 +56,6 @@ The ONNX model is about 102 MB and is stored as four smaller files to stay below
 
 ## Results
 
-The workbook has the columns **Image Filename**, **Confidence**, and **Asset Type**. Confidence is written as a decimal (for example, `0.927`) and displayed as a percentage in the preview. Images with no detections receive a `No Detection` row with confidence `0`.
+The workbook has the columns **Image Filename**, **Confidence**, **Asset Type**, **x1**, **y1**, **x2**, and **y2**. Confidence is a decimal (for example, `0.927`) in both the workbook and preview. `(x1, y1)` and `(x2, y2)` are the top-left and bottom-right bounding-box corners, in pixels relative to the original image; coordinates are rounded to two decimal places. Images with no detections receive a `No Detection` row with confidence `0` and blank coordinates.
 
 Annotated images download together in a ZIP file named `Annotated_Asset_ImagesMMDDYY.zip`, containing a folder named `Annotated_Asset_ImagesMMDDYY`. The workbook downloads as `Annotated_Asset_SpreadsheetMMDDYY.xlsx`. The date uses the visitor's local date.

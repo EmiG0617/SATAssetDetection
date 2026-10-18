@@ -7,7 +7,7 @@
   const MAX_DETECTIONS = 300;
   const PREVIEW_LIMIT = 50;
   const SUPPORTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/bmp"]);
-  const SPREADSHEET_HEADERS = ["Image Filename", "Confidence", "Asset Type"];
+  const SPREADSHEET_HEADERS = ["Image Filename", "Confidence", "Asset Type", "x1", "y1", "x2", "y2"];
 
   const elements = {
     singleMode: document.querySelector("#single-mode"),
@@ -159,7 +159,7 @@
     elements.successMessage.hidden = true;
     elements.resultsGrid.innerHTML = '<p class="empty-state">Annotated previews will appear here after detection.</p>';
     elements.resultsPreviewNote.hidden = true;
-    elements.spreadsheetPreview.innerHTML = '<tr><td class="empty-table" colspan="3">The spreadsheet preview will appear here after detection.</td></tr>';
+    elements.spreadsheetPreview.innerHTML = '<tr><td class="empty-table" colspan="7">The spreadsheet preview will appear here after detection.</td></tr>';
     elements.downloadImages.disabled = true;
     elements.downloadSpreadsheet.disabled = true;
     elements.tableNote.hidden = true;
@@ -629,8 +629,12 @@
                 "Image Filename": filename,
                 Confidence: Math.round(detection.confidence * 1000) / 1000,
                 "Asset Type": modelMetadata.classNames[detection.classIndex],
-              }))
-            : [{ "Image Filename": filename, Confidence: 0, "Asset Type": "No Detection" }];
+              x1: Math.round(detection.x1 * 100) / 100,
+              y1: Math.round(detection.y1 * 100) / 100,
+              x2: Math.round(detection.x2 * 100) / 100,
+              y2: Math.round(detection.y2 * 100) / 100,
+            }))
+            : [{ "Image Filename": filename, Confidence: 0, "Asset Type": "No Detection", x1: "", y1: "", x2: "", y2: "" }];
           results.push({
             file: item.file,
             imageResult: { blob: annotatedBlob, filename, archivePath: resultPath(filename) },
@@ -668,7 +672,7 @@
     if (rows.length === 0) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 3;
+      cell.colSpan = SPREADSHEET_HEADERS.length;
       cell.className = "empty-table";
       cell.textContent = "No images were processed.";
       row.append(cell);
@@ -683,9 +687,7 @@
       for (const [index, header] of SPREADSHEET_HEADERS.entries()) {
         const cell = document.createElement("td");
         const value = result[header];
-        cell.textContent = header === "Confidence" && result["Asset Type"] !== "No Detection"
-          ? `${(value * 100).toFixed(1)}%`
-          : String(value);
+        cell.textContent = String(value);
         row.append(cell);
       }
       fragment.append(row);
@@ -715,7 +717,7 @@
     elements.resultsGrid.replaceChildren();
     elements.resultsPreviewNote.hidden = selectedFiles.length <= PREVIEW_LIMIT;
     elements.resultsPreviewNote.textContent = `Showing previews for the first ${PREVIEW_LIMIT} images only. The ZIP and spreadsheet include results for the full folder.`;
-    elements.spreadsheetPreview.innerHTML = '<tr><td class="empty-table" colspan="3">Detection is running…</td></tr>';
+    elements.spreadsheetPreview.innerHTML = '<tr><td class="empty-table" colspan="7">Detection is running…</td></tr>';
     setStatus("Loading model", "busy");
     let failedCount = 0;
     let detectionCount = 0;
@@ -903,7 +905,7 @@
       return;
     }
     const worksheet = window.XLSX.utils.json_to_sheet(spreadsheetRows, { header: SPREADSHEET_HEADERS });
-    worksheet["!cols"] = [{ wch: 44 }, { wch: 14 }, { wch: 34 }];
+    worksheet["!cols"] = [{ wch: 44 }, { wch: 14 }, { wch: 34 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     const workbook = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(workbook, worksheet, "Asset Detections");
     window.XLSX.writeFile(workbook, `Annotated_Asset_Spreadsheet${dateStamp()}.xlsx`);

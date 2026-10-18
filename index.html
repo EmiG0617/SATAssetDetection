@@ -116,7 +116,7 @@
               <div class="section-title-row">
                 <div>
                   <h3>Detection spreadsheet</h3>
-                  <p class="section-description">One row per detected asset. Images without detections are listed as “No Detection.”</p>
+                  <p class="section-description">One row per detected asset. Confidence is a decimal; (x1, y1) and (x2, y2) are the top-left and bottom-right bounding-box corners in image pixels. Images without detections are listed as “No Detection.”</p>
                 </div>
                 <button class="secondary-button" id="download-spreadsheet" type="button" disabled>Download .xlsx</button>
               </div>
@@ -127,10 +127,14 @@
                       <th scope="col">Image Filename</th>
                       <th scope="col">Confidence</th>
                       <th scope="col">Asset Type</th>
+                      <th scope="col">x1</th>
+                      <th scope="col">y1</th>
+                      <th scope="col">x2</th>
+                      <th scope="col">y2</th>
                     </tr>
                   </thead>
                   <tbody id="spreadsheet-preview">
-                    <tr><td class="empty-table" colspan="3">The spreadsheet preview will appear here after detection.</td></tr>
+                    <tr><td class="empty-table" colspan="7">The spreadsheet preview will appear here after detection.</td></tr>
                   </tbody>
                 </table>
               </div>
