@@ -45,6 +45,7 @@
   let modelSession;
   let modelMetadata;
   let modelExecutionProvider = "wasm";
+  let modelThreadCount = 1;
   let annotatedImages = [];
   let spreadsheetRows = [];
   let isProcessing = false;
@@ -226,6 +227,7 @@
     window.ort.env.wasm.numThreads = window.crossOriginIsolated
       ? Math.min(4, navigator.hardwareConcurrency || 1)
       : 1;
+    modelThreadCount = window.ort.env.wasm.numThreads;
     if (window.ort.env.webgpu) {
       window.ort.env.webgpu.powerPreference = "high-performance";
     }
@@ -294,7 +296,20 @@
     }
 
     const sessionOptions = { graphOptimizationLevel: "all" };
-    if (window.isSecureContext && navigator.gpu) {
+    const requestedProvider = new URLSearchParams(window.location.search).get("provider");
+    if (requestedProvider === "wasm") {
+      setProgress(
+        modelThreadCount > 1
+          ? `Starting CPU inference with ${modelThreadCount} WASM threads…`
+          : "Starting CPU inference with one WASM thread…",
+        28,
+      );
+      modelSession = await window.ort.InferenceSession.create(modelBytes, {
+        ...sessionOptions,
+        executionProviders: ["wasm"],
+      });
+      modelExecutionProvider = "wasm";
+    } else if (window.isSecureContext && navigator.gpu) {
       setProgress("Starting the detection model with WebGPU…", 28);
       try {
         modelSession = await window.ort.InferenceSession.create(modelBytes, {
@@ -719,7 +734,10 @@
       const batchSize = modelMetadata.dynamicBatch ? modelMetadata.maxBatchSize : 1;
       const processingStart = performance.now();
       const selectedFileIndexes = new Map(selectedFiles.map((file, index) => [file, index]));
-      setStatus(`Detecting (${modelExecutionProvider}, batch ${batchSize})`, "busy");
+      const providerLabel = modelExecutionProvider === "wasm"
+        ? `WASM, ${modelThreadCount} thread${modelThreadCount === 1 ? "" : "s"}`
+        : modelExecutionProvider;
+      setStatus(`Detecting (${providerLabel}, batch ${batchSize})`, "busy");
       for (let index = 0; index < selectedFiles.length; index += batchSize) {
         const files = selectedFiles.slice(index, index + batchSize);
         const lastIndex = index + files.length;
@@ -780,7 +798,7 @@
         elements.successMessage.classList.remove("partial");
       }
       setStatus(
-        failedCount ? "Finished with errors" : `Detection complete (${modelExecutionProvider})`,
+        failedCount ? "Finished with errors" : `Detection complete (${providerLabel})`,
         failedCount ? "" : "ready",
       );
     } catch (error) {
